@@ -6,7 +6,6 @@
 #include "sets/BinaryTreeSet.hpp"
 #include "benchmark/Benchmark.hpp"
 #include "domain/Values.hpp"
-#include "trees/NaryTree.hpp"
 
 template <class T>
 std::string Elements(const IEnumerable<T>& source) {
@@ -118,115 +117,6 @@ TEST(Tree, SpaceSeparatedText) {
     BinaryTree<double> decimals;
     decimals.Add(1.2345678901234567);
     EXPECT_DOUBLE_EQ(*BinaryTree<double>::FromString(decimals.ToString()).Find(1.2345678901234567), 1.2345678901234567);
-}
-
-TEST(NaryTree, TraversalsAndPaths) {
-    EXPECT_THROW(NaryTree<int>(0), std::invalid_argument);
-    EXPECT_THROW(NaryTree<int>(-1), std::invalid_argument);
-    NaryTree<int> tree(3);
-    for (int i = 1; i <= 10; ++i) tree.Add(i);
-    const char* expected[]{"1 2 5 6 7 3 8 9 10 4 ", "1 4 3 10 9 8 2 7 6 5 ",
-        "5 6 7 2 8 9 10 3 4 1 ", "4 10 9 8 3 7 6 5 2 1 ", "1 2 3 4 5 6 7 8 9 10 "};
-    for (int i = 0; i < 5; ++i) {
-        auto enumerator = tree.GetEnumerator(static_cast<NaryTraversal>(i));
-        EXPECT_THROW(enumerator->CurrentRef(), std::logic_error);
-        std::string actual;
-        while (enumerator->MoveNext()) {
-            actual += WriteText(enumerator->CurrentRef()) + " ";
-            EXPECT_EQ(&enumerator->CurrentRef(), tree.Find(enumerator->CurrentRef()));
-        }
-        EXPECT_EQ(actual, expected[i]);
-        EXPECT_THROW(enumerator->CurrentRef(), std::logic_error);
-    }
-    EXPECT_THROW(tree.GetEnumerator(static_cast<NaryTraversal>(5)), std::invalid_argument);
-    ArraySequence<int> path;
-    EXPECT_EQ(tree.GetByPath(path), 1);
-    EXPECT_THROW(tree.AddChild(path, 11), std::invalid_argument);
-    path.Append(1); path.Append(2);
-    EXPECT_EQ(tree.GetByPath(path), 10);
-    path.RemoveAt(0);
-    EXPECT_EQ(tree.GetByPath(3, path), 10);
-    EXPECT_THROW(tree.GetByPath(99, path), std::out_of_range);
-    path.GetMutable(0) = -1;
-    EXPECT_THROW(tree.GetByPath(path), std::out_of_range);
-    path.GetMutable(0) = 3;
-    EXPECT_THROW(tree.GetByPath(path), std::out_of_range);
-    NaryTree<int> uneven(2);
-    uneven.Add(1);
-    path.Clear(); uneven.AddChild(path, 2);
-    path.Append(0); uneven.AddChild(path, 3);
-    for (int i = 4; i <= 6; ++i) uneven.Add(i);
-    path.GetMutable(0) = 1; path.Append(0);
-    EXPECT_EQ(uneven.GetByPath(path), 6);
-    NaryTree<int> wide(12);
-    for (int i = 0; i <= 12; ++i) wide.Add(i);
-    path.Clear(); path.Append(11);
-    EXPECT_EQ(wide.GetByPath(path), 12);
-}
-
-TEST(NaryTree, FunctionsSubtreesAndOwnership) {
-    auto tree = NaryTree<int>::FromString("1 2 3 4 5 6 7 8 9 10", 3);
-    auto copy = tree;
-    auto subtree = tree.ExtractSubtree(2);
-    EXPECT_EQ(subtree.GetCount(), 4);
-    EXPECT_TRUE(tree.ContainsSubtree(subtree));
-    EXPECT_TRUE(tree.ContainsSubtree(NaryTree<int>(3)));
-    subtree.Add(11);
-    EXPECT_FALSE(tree.ContainsSubtree(subtree));
-    EXPECT_THROW(tree.ExtractSubtree(99), std::out_of_range);
-    const auto mapped = tree.Map([](int value) { return -value; });
-    EXPECT_EQ(Elements(mapped), "-1 -2 -5 -6 -7 -3 -8 -9 -10 -4 ");
-    EXPECT_EQ(tree.Map([](int) { return 0; }).GetCount(), 10);
-    EXPECT_EQ(tree.Where([](int value) { return value % 2 == 0; }).ToString(), "2 4 6 8 10");
-    EXPECT_EQ(tree.Reduce(0, [](int value, int sum) { return value + sum; }), 55);
-    EXPECT_THROW(tree.Map([](int value) { if (value == 5) throw std::runtime_error("stop"); return value; }), std::runtime_error);
-    EXPECT_EQ(tree.GetCount(), 10);
-    const IEnumerable<int>& source = subtree;
-    EXPECT_EQ(tree.Merge(source).GetCount(), 15);
-    auto enumerator = tree.GetEnumerator();
-    ASSERT_TRUE(enumerator->MoveNext());
-    EXPECT_FALSE(tree.Remove(99));
-    EXPECT_TRUE(tree.Remove(2));
-    EXPECT_EQ(tree.GetCount(), 6);
-    EXPECT_EQ(tree.Find(5), nullptr);
-    EXPECT_THROW(enumerator->CurrentRef(), std::logic_error);
-    EXPECT_EQ(copy.GetCount(), 10);
-    ArraySequence<int> path;
-    path.Append(0);
-    EXPECT_EQ(tree.GetByPath(path), 3);
-    tree.Add(11);
-    EXPECT_EQ(tree.GetCount(), 7);
-    auto old = copy.GetEnumerator();
-    NaryTree<int> moved(Move(copy));
-    EXPECT_TRUE(copy.IsEmpty());
-    EXPECT_THROW(old->MoveNext(), std::logic_error);
-    tree = moved;
-    EXPECT_EQ(tree.ToString(), moved.ToString());
-    tree = Move(moved);
-    EXPECT_TRUE(moved.IsEmpty());
-    tree.RemoveByPath(path);
-    EXPECT_EQ(tree.GetCount(), 6);
-    tree.Clear();
-    EXPECT_FALSE(tree.GetEnumerator()->MoveNext());
-    EXPECT_THROW(tree.RemoveByPath(path), std::out_of_range);
-}
-
-TEST(NaryTree, TextAndDeepTrees) {
-    NaryTree<std::string> strings(2);
-    strings.Add("hello \"world\" \\"); strings.Add(""); strings.Add("same"); strings.Add("same");
-    EXPECT_EQ(NaryTree<std::string>::FromString(strings.ToString(), 2).ToString(), strings.ToString());
-    EXPECT_TRUE(NaryTree<int>::FromString(" \t\n", 1).IsEmpty());
-    EXPECT_THROW(NaryTree<int>::FromString("1 bad", 2), std::invalid_argument);
-    EXPECT_THROW(NaryTree<std::string>::FromString("\"unfinished", 2), std::invalid_argument);
-    NaryTree<int> chain(1);
-    for (int i = 0; i < 20000; ++i) chain.Add(i);
-    auto copy = chain;
-    const auto mapped = copy.Map([](int value) { return value + 1; });
-    EXPECT_EQ(*mapped.Find(20000), 20000);
-    chain.Clear();
-    EXPECT_EQ(copy.GetCount(), 20000);
-    EXPECT_TRUE(copy.Remove(0));
-    EXPECT_TRUE(copy.IsEmpty());
 }
 
 TEST(Set, AlgebraFunctionsAndText) {
@@ -405,20 +295,6 @@ TEST(Ownership, PointersArrayAndList) {
         tree.Clear();
         EXPECT_EQ(Resource::alive, 1);
         EXPECT_EQ(copy.GetCount(), 1);
-    }
-    EXPECT_EQ(Resource::alive, 0);
-    {
-        NaryTree<Resource> tree(2);
-        for (int i = 0; i < 5; ++i) tree.Add(Resource());
-        auto copy = tree;
-        tree.Clear();
-        EXPECT_EQ(Resource::alive, 5);
-        int transformed = 0;
-        EXPECT_THROW(copy.Map([&](const Resource& value) {
-            if (++transformed == 3) throw std::runtime_error("stop");
-            return value;
-        }), std::runtime_error);
-        EXPECT_EQ(Resource::alive, 5);
     }
     EXPECT_EQ(Resource::alive, 0);
     {

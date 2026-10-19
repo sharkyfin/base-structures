@@ -12,16 +12,9 @@ public:
     virtual UniquePtr<ISet<T>> Intersection(const ISet<T>& other) const = 0;
     virtual UniquePtr<ISet<T>> Difference(const ISet<T>& other) const = 0;
 
-    bool IsSubsetOf(const ISet<T>& other) const {
-        if (this->GetCount() > other.GetCount()) return false;
-        auto enumerator = this->GetEnumerator();
-        while (enumerator->MoveNext()) {
-            if (!other.Contains(enumerator->CurrentRef())) return false;
-        }
-        return true;
-    }
+    bool IsSubsetOf(const ISet<T>& other) const;
 
-    bool Equals(const ISet<T>& other) const {
-        return this->GetCount() == other.GetCount() && IsSubsetOf(other);
-    }
+    bool Equals(const ISet<T>& other) const;
 };
+
+#include "ISet.tpp"
