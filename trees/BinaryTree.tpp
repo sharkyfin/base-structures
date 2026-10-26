@@ -28,7 +28,7 @@ bool BinaryTree<T, Compare>::Enumerator::MoveNext() {
         if (current->right) pending.PushBack(Frame{current->right.get(), 0});
         return true;
     }
-    const char* steps[]{"KLR", "KRL", "LRK", "LKR", "RLK", "RKL"};
+    const char* steps[]{"KLP", "KPL", "LPK", "LKP", "PLK", "PKL"};
     while (!pending.IsEmpty()) {
         Frame& frame = *pending.begin();
         if (frame.stage == 3) { pending.PopFront(); continue; }
