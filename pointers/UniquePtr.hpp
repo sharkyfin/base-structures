@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstddef>
+
 #include "DefaultDelete.hpp"
 #include "PointerOperations.hpp"
 
@@ -133,6 +135,11 @@ public:
         Swap(deleter, other.deleter);
     }
 };
+
+template <class T, class Deleter>
+bool operator==(const UniquePtr<T, Deleter>& ptr, std::nullptr_t) noexcept {
+    return ptr.get() == nullptr;
+}
 
 template <class T, class... Args>
 UniquePtr<T> MakeUnique(Args&&... args) {

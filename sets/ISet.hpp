@@ -1,9 +1,9 @@
 #pragma once
 
-#include "core/IStorage.hpp"
+#include "core/ICollectible.hpp"
 
 template <class T>
-class ISet : public IStorage<T> {
+class ISet : public ICollectible<T> {
 public:
     virtual bool Add(const T& value) = 0;
     virtual bool Remove(const T& value) = 0;

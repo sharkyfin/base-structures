@@ -13,7 +13,7 @@
 #include "sequences/ArraySequence.hpp"
 
 template <class T>
-class PriorityQueue : public IStorage<T> {
+class PriorityQueue : public ICollectible<T> {
 private:
     UniquePtr<IPriorityStorage<T>> storage;
 

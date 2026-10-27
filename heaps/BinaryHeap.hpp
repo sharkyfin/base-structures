@@ -3,7 +3,7 @@
 #include "sequences/ArraySequence.hpp"
 
 template <class T, class Compare = Less<T>>
-class BinaryHeap : public IStorage<T> {
+class BinaryHeap : public ICollectible<T> {
 private:
     ArraySequence<T> values;
     Compare compare;
@@ -17,7 +17,7 @@ private:
 public:
     BinaryHeap(Compare compare = Compare());
 
-    BinaryHeap(const IStorage<T>& source, Compare compare = Compare());
+    BinaryHeap(const ICollectible<T>& source, Compare compare = Compare());
 
     int GetCount() const override;
     const Compare& GetCompare() const noexcept;

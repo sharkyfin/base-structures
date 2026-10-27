@@ -37,7 +37,7 @@ template <class T, class Compare>
 BinaryHeap<T, Compare>::BinaryHeap(Compare compare) : compare(Move(compare)) {}
 
 template <class T, class Compare>
-BinaryHeap<T, Compare>::BinaryHeap(const IStorage<T>& source, Compare compare) : values(source), compare(Move(compare)) {
+BinaryHeap<T, Compare>::BinaryHeap(const ICollectible<T>& source, Compare compare) : values(source), compare(Move(compare)) {
     for (int i = GetCount() / 2; i > 0; --i) Down(i - 1);
 }
 

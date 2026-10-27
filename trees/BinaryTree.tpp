@@ -163,8 +163,8 @@ bool BinaryTree<T, Compare>::Erase(UniquePtr<Node>& node, const Key& key) {
 
 template <class T, class Compare>
 template <class Key>
-const typename BinaryTree<T, Compare>::Node* BinaryTree<T, Compare>::FindNode(const Key& key) const {
-    const Node* node = root.get();
+typename BinaryTree<T, Compare>::Node* BinaryTree<T, Compare>::FindNode(const Key& key) const {
+    Node* node = root.get();
     while (node) {
         if (compare(key, node->value)) node = node->left.get();
         else if (compare(node->value, key)) node = node->right.get();
@@ -299,6 +299,13 @@ bool BinaryTree<T, Compare>::Remove(const Key& key) {
     --count;
     Invalidate();
     return true;
+}
+
+template <class T, class Compare>
+template <class Key>
+T* BinaryTree<T, Compare>::Find(const Key& key) {
+    Node* node = FindNode(key);
+    return node ? &node->value : nullptr;
 }
 
 template <class T, class Compare>

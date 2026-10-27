@@ -3,9 +3,9 @@
 #include "core/IEnumerable.hpp"
 
 template <class T>
-class IStorage : public IEnumerable<T> {
+class ICollectible : public IEnumerable<T> {
 public:
-    ~IStorage() override = default;
+    ~ICollectible() override = default;
     virtual int GetCount() const = 0;
 
     bool IsEmpty() const {

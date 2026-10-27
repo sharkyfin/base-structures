@@ -1,8 +1,18 @@
 #include <gtest/gtest.h>
 
+#include <memory>
+#include <random>
+#include <string>
+
+#include "algorithms/Algorithm.hpp"
+#include "core/ICollectible.hpp"
 #include "core/IEnumerable.hpp"
+#include "dictionaries/HashTable.hpp"
+#include "dictionaries/SortedDictionary.hpp"
+#include "dictionaries/TreeDictionary.hpp"
 #include "heaps/BinaryHeap.hpp"
 #include "queues/PriorityQueue.hpp"
+#include "sequences/SortedArraySequence.hpp"
 #include "sets/BinaryTreeSet.hpp"
 #include "benchmark/Benchmark.hpp"
 #include "domain/Values.hpp"
@@ -337,4 +347,149 @@ TEST(Values, RecordsFunctionsAndTiming) {
     const auto limited = Measure(100000, 0.000000001, [](int) {});
     EXPECT_TRUE(limited.timedOut);
     EXPECT_LT(limited.completed, 100000);
+}
+
+TEST(SharedStructures, CollectionInteroperability) {
+    ArraySequence<int> array;
+    SortedArraySequence<int> sorted;
+    BinaryTree<int> tree;
+    BinaryTreeSet<int> set;
+    for (int value : {3, 1, 2}) {
+        array.Append(value);
+        sorted.Add(value);
+        tree.Add(value);
+        set.Add(value);
+    }
+    const ICollectible<int>* sources[]{&array, &sorted, &tree, &set};
+    for (const ICollectible<int>* source : sources) {
+        EXPECT_EQ(source->GetCount(), 3);
+        EXPECT_FALSE(source->IsEmpty());
+        const IEnumerable<int>& enumerable = *source;
+        ArraySequence<int> copy(*source);
+        auto entries = enumerable.GetEnumerator();
+        int count = 0;
+        while (entries->MoveNext()) EXPECT_EQ(entries->CurrentRef(), copy.Get(count++));
+        EXPECT_EQ(count, source->GetCount());
+        SortedArraySequence<int> ordered(*source);
+        for (int index = 0; index < 3; ++index) EXPECT_EQ(ordered.Get(index), index + 1);
+    }
+}
+
+TEST(SharedStructures, DictionaryContractsAndCopies) {
+    SortedDictionary<int, std::string> sorted;
+    TreeDictionary<int, std::string> tree;
+    HashTable<int, std::string> hash;
+    IDictionary<int, std::string>* dictionaries[]{&sorted, &tree, &hash};
+    for (auto* dictionary : dictionaries) {
+        dictionary->Add(2, "two");
+        dictionary->Add(1, "one");
+        dictionary->Get(2) = "updated";
+        const IDictionary<int, std::string>& view = *dictionary;
+        EXPECT_EQ(dictionary->Find(2), view.Find(2));
+        EXPECT_EQ(view.Get(2), "updated");
+        EXPECT_THROW(dictionary->Add(2, "duplicate"), std::invalid_argument);
+        EXPECT_THROW(view.Get(9), std::out_of_range);
+        const ICollectible<Pair<int, std::string>>& collection = view;
+        ArraySequence<Pair<int, std::string>> entries(collection);
+        ASSERT_EQ(entries.GetCount(), 2);
+        auto enumerator = collection.GetEnumerator();
+        while (enumerator->MoveNext()) {
+            const auto& entry = enumerator->CurrentRef();
+            EXPECT_EQ(&entry.value, view.Find(entry.key));
+        }
+        dictionary->Remove(1);
+        EXPECT_FALSE(view.ContainsKey(1));
+        EXPECT_THROW(dictionary->Remove(1), std::out_of_range);
+    }
+    // Mutable dictionary lookup must keep referring to the original AVL node.
+    std::string* original = tree.Find(2);
+    for (int key = 3; key < 100; ++key) tree.Add(key, std::to_string(key));
+    EXPECT_EQ(tree.Find(2), original);
+    auto copy = tree;
+    copy.Get(2) = "copy";
+    EXPECT_EQ(tree.Get(2), "updated");
+    EXPECT_NE(copy.Find(2), original);
+    TreeDictionary<int, std::string> moved(Move(copy));
+    EXPECT_TRUE(copy.IsEmpty());
+    copy.Add(1, "reused");
+    EXPECT_EQ(moved.Get(2), "copy");
+    EXPECT_TRUE(tree.IsValid());
+    EXPECT_TRUE(moved.IsValid());
+
+    HashTable<std::string, int> names;
+    names.Add("Ivanov", 2);
+    auto namesCopy = names;
+    namesCopy.Get("Ivanov") = 3;
+    EXPECT_EQ(names.Get("Ivanov"), 2);
+}
+
+TEST(SharedStructures, ExtendedTreeAndSetOperations) {
+    BinaryTree<int> tree;
+    for (int value : {4, 2, 6, 1, 3, 5, 7}) tree.Add(value);
+    auto breadthFirst = tree.GetEnumerator(Traversal::BreadthFirst);
+    for (int value : {4, 2, 6, 1, 3, 5, 7}) {
+        ASSERT_TRUE(breadthFirst->MoveNext());
+        EXPECT_EQ(breadthFirst->CurrentRef(), value);
+    }
+    EXPECT_FALSE(breadthFirst->MoveNext());
+    auto subtree = tree.ExtractSubtree(2);
+    EXPECT_TRUE(tree.ContainsSubtree(subtree));
+    auto snapshot = tree;
+    auto old = tree.GetEnumerator();
+    EXPECT_EQ(tree.PopMaximum(), 7);
+    EXPECT_THROW(old->MoveNext(), std::logic_error);
+    EXPECT_EQ(snapshot.Maximum(), 7);
+    EXPECT_EQ(tree.GetByPath(2, "R"), 3);
+    EXPECT_EQ(tree.Where([](int value) { return value % 2 == 0; }).ToString(), "2 4 6");
+    EXPECT_EQ(tree.Map([](int value) { return value * 2; }).Reduce(0,
+        [](int value, int sum) { return sum + value; }), 42);
+
+    auto first = BinaryTreeSet<int>::FromString("1 2 3");
+    auto second = BinaryTreeSet<int>::FromString("3 4");
+    EXPECT_EQ((first | second).ToString(), "1 2 3 4");
+    EXPECT_EQ((first & second).ToString(), "3");
+    EXPECT_EQ((first - second).ToString(), "1 2");
+    EXPECT_TRUE((first & second).IsSubsetOf(first));
+    auto setCopy = first;
+    first.Clear();
+    EXPECT_TRUE(first.IsEmpty());
+    EXPECT_TRUE(setCopy.Equals(BinaryTreeSet<int>::FromString("1 2 3")));
+}
+
+TEST(SharedStructures, ArrayResourceLifetimeAndResize) {
+    DynamicArray<std::shared_ptr<int>> owners;
+    owners.Append(std::make_shared<int>(1));
+    owners.Append(std::make_shared<int>(2));
+    std::weak_ptr<int> removed = owners.Get(0);
+    std::weak_ptr<int> last = owners.Get(1);
+    owners.RemoveAt(0);
+    EXPECT_TRUE(removed.expired());
+    EXPECT_FALSE(last.expired());
+    owners.PopBack();
+    EXPECT_TRUE(last.expired());
+    owners.Append(std::make_shared<int>(3));
+    std::weak_ptr<int> cleared = owners.Get(0);
+    owners.Clear();
+    EXPECT_TRUE(cleared.expired());
+    EXPECT_TRUE(owners.IsEmpty());
+
+    DynamicArray<std::string> values;
+    values.Append(std::string(128, 'x'));
+    values.Resize(values.GetCapacity() + 1, values.Get(0));
+    EXPECT_EQ(values.Back(), std::string(128, 'x'));
+    values.Resize(1);
+    EXPECT_EQ(values.GetSize(), 1);
+    EXPECT_THROW(values.Resize(-1), std::invalid_argument);
+    EXPECT_THROW(values.Reserve(-1), std::invalid_argument);
+}
+
+TEST(SharedStructures, ReverseAndShuffle) {
+    DynamicArray<int> values;
+    for (int value = 0; value < 100; ++value) values.Append(value);
+    Reverse(values.begin(), values.end());
+    for (int index = 0; index < values.GetSize(); ++index) EXPECT_EQ(values.Get(index), 99 - index);
+    std::mt19937 random(42);
+    Shuffle(values.begin(), values.end(), random);
+    values.Sort();
+    for (int index = 0; index < values.GetSize(); ++index) EXPECT_EQ(values.Get(index), index);
 }

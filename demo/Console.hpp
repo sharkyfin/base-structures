@@ -20,7 +20,7 @@ template <class Action>
 void RunMenu(const char* menu, Action action);
 
 template <class T, class Writer>
-void Show(const IStorage<T>& source, Writer write, UniquePtr<IEnumerator<T>> enumerator = {},
+void Show(const ICollectible<T>& source, Writer write, UniquePtr<IEnumerator<T>> enumerator = {},
     const std::string& details = {});
 
 template <class T, class Reader, class Generator>

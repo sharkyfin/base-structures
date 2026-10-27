@@ -7,14 +7,14 @@
 
 #include "core/ForwardList.hpp"
 #include "core/Functional.hpp"
-#include "core/IStorage.hpp"
+#include "core/ICollectible.hpp"
 #include "core/IEnumerable.hpp"
 #include "core/Text.hpp"
 
 enum class Traversal { KLP, KPL, LPK, LKP, PLK, PKL, BreadthFirst };
 
 template <class T, class Compare = Less<T>>
-class BinaryTree : public IStorage<T> {
+class BinaryTree : public ICollectible<T> {
 private:
     struct Node {
         T value;
@@ -54,7 +54,7 @@ private:
     bool Erase(UniquePtr<Node>& node, const Key& key);
 
     template <class Key>
-    const Node* FindNode(const Key& key) const;
+    Node* FindNode(const Key& key) const;
 
     static UniquePtr<Node> Clone(const Node* node, int& copied);
 
@@ -109,6 +109,9 @@ public:
 
     template <class Key>
     bool Remove(const Key& key);
+
+    template <class Key>
+    T* Find(const Key& key);
 
     template <class Key>
     const T* Find(const Key& key) const;

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <random>
+
 #include "pointers/PointerOperations.hpp"
 
 template <class T, class Compare>
@@ -48,3 +50,23 @@ void QuickSort(T* first, T* last, Compare comp) {
     InsertionSort(first, last, comp);
 }
 
+template <class T>
+void Reverse(T* first, T* last) {
+    if (first >= last) return;
+    --last;
+    while (first < last) {
+        Swap(*first, *last);
+        ++first;
+        --last;
+    }
+}
+
+template <class T, class URBG>
+void Shuffle(T* first, T* last, URBG& g) {
+    const int n = static_cast<int>(last - first);
+    for (int i = n - 1; i > 0; --i) {
+        std::uniform_int_distribution<int> dist(0, i);
+        const int j = dist(g);
+        Swap(first[i], first[j]);
+    }
+}

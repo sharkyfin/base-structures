@@ -2,10 +2,10 @@
 
 #include <stdexcept>
 
-#include "core/IStorage.hpp"
+#include "core/ICollectible.hpp"
 
 template <class T>
-class Sequence : public IStorage<T> {
+class Sequence : public ICollectible<T> {
 public:
     virtual const T& Get(int index) const = 0;
 

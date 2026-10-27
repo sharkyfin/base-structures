@@ -1,9 +1,9 @@
 #pragma once
 
-#include "core/IStorage.hpp"
+#include "core/ICollectible.hpp"
 
 template <class T>
-class IPriorityStorage : public IStorage<T> {
+class IPriorityStorage : public ICollectible<T> {
 public:
     virtual void Add(T value) = 0;
     virtual const T& Peek() const = 0;
