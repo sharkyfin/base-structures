@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include <cstdlib>
 #include <memory>
 #include <random>
 #include <string>
@@ -16,6 +17,7 @@
 #include "sets/BinaryTreeSet.hpp"
 #include "benchmark/Benchmark.hpp"
 #include "domain/Values.hpp"
+#include "GUI/TreeSession.hpp"
 
 template <class T>
 std::string Elements(const IEnumerable<T>& source) {
@@ -23,6 +25,203 @@ std::string Elements(const IEnumerable<T>& source) {
     auto enumerator = source.GetEnumerator();
     while (enumerator->MoveNext()) result += WriteText(enumerator->CurrentRef()) + " ";
     return result;
+}
+
+TEST(Tree, ReadOnlyStructureAndObserverLifetime) {
+    class Observer : public TreeObserver<int> {
+    public:
+        int comparisons{0};
+        int rotations{0};
+        void OnTreeEvent(TreeEvent event, const int*, const int*) noexcept override {
+            if (event == TreeEvent::Compare) ++comparisons;
+            if (event == TreeEvent::RotatedLeft || event == TreeEvent::RotatedRight) ++rotations;
+        }
+    } observer;
+    BinaryTree<int> tree;
+    tree.SetObserver(&observer);
+    tree.Add(3); tree.Add(1); tree.Add(2);
+    EXPECT_EQ(observer.rotations, 2);
+    EXPECT_TRUE(tree.IsValid());
+    int visited = 0;
+    tree.VisitNodes([&](const int& value, const int* left, const int* right, int height) {
+        if (visited++ == 0) {
+            EXPECT_EQ(value, 2);
+            ASSERT_NE(left, nullptr);
+            ASSERT_NE(right, nullptr);
+            EXPECT_EQ(*left, 1);
+            EXPECT_EQ(*right, 3);
+            EXPECT_EQ(height, 2);
+        }
+    });
+    EXPECT_EQ(visited, 3);
+    const int comparisons = observer.comparisons;
+    auto copy = tree;
+    EXPECT_NE(copy.Find(1), nullptr);
+    BinaryTree<int> moved(Move(tree));
+    EXPECT_NE(moved.Find(1), nullptr);
+    EXPECT_EQ(observer.comparisons, comparisons);
+    tree.SetObserver(nullptr);
+    moved.SetObserver(&observer);
+    EXPECT_EQ(moved.Find(100), nullptr);
+    EXPECT_GT(observer.comparisons, comparisons);
+    moved.SetObserver(nullptr);
+}
+
+void CheckSnapshot(const TreeFrame& frame, bool balanced) {
+    for (int i = 0; i < frame.nodes.GetCount(); ++i) {
+        const TreeNodeView& node = frame.nodes.Get(i);
+        int leftHeight = 0;
+        int rightHeight = 0;
+        int leftCount = 0;
+        int rightCount = 0;
+        for (int j = 0; j < frame.nodes.GetCount(); ++j) {
+            const TreeNodeView& other = frame.nodes.Get(j);
+            if (node.hasLeft && other.value == node.left) { leftHeight = other.height; ++leftCount; }
+            if (node.hasRight && other.value == node.right) { rightHeight = other.height; ++rightCount; }
+            if (i != j) EXPECT_NE(node.value, other.value);
+        }
+        EXPECT_EQ(leftCount, node.hasLeft ? 1 : 0);
+        EXPECT_EQ(rightCount, node.hasRight ? 1 : 0);
+        if (node.hasLeft) EXPECT_LT(node.left, node.value);
+        if (node.hasRight) EXPECT_GT(node.right, node.value);
+        EXPECT_EQ(node.height, 1 + (leftHeight > rightHeight ? leftHeight : rightHeight));
+        EXPECT_EQ(node.balance, leftHeight - rightHeight);
+        if (balanced) EXPECT_LE(std::abs(node.balance), 1);
+    }
+}
+
+TEST(GUI, AllFourActualRotationTraces) {
+    const char* expected[]{"rotate-right ", "rotate-left ", "rotate-left rotate-right ", "rotate-right rotate-left "};
+    const int roots[]{30, 70, 40, 60};
+    const auto findNode = [](const TreeFrame& frame, int value) -> const TreeNodeView* {
+        for (int i = 0; i < frame.nodes.GetCount(); ++i) {
+            if (frame.nodes.Get(i).value == value) return &frame.nodes.Get(i);
+        }
+        return nullptr;
+    };
+    for (int example = 0; example < 4; ++example) {
+        SCOPED_TRACE(example);
+        TreeSession session;
+        session.Execute("preset", example);
+        std::string rotations;
+        bool imbalance = false;
+        const auto& frames = session.GetFrames();
+        ASSERT_EQ(frames.GetCount(), example < 2 ? 3 : 4);
+        EXPECT_EQ(frames.Get(0).action, "imbalance");
+        EXPECT_EQ(frames.Get(frames.GetCount() - 1).action, "done");
+        for (int i = 0; i < frames.GetCount(); ++i) {
+            const TreeFrame& frame = frames.Get(i);
+            CheckSnapshot(frame, false);
+            if (frame.action == "rotate-left" || frame.action == "rotate-right") {
+                rotations += frame.action + " ";
+                EXPECT_TRUE(frame.hasCurrent);
+                EXPECT_TRUE(frame.hasRelated);
+                ASSERT_GT(i, 0);
+                const auto* promotedBefore = findNode(frames.Get(i - 1), frame.current);
+                const auto* pivotAfter = findNode(frame, frame.related);
+                const auto* promotedAfter = findNode(frame, frame.current);
+                ASSERT_NE(promotedBefore, nullptr);
+                ASSERT_NE(pivotAfter, nullptr);
+                ASSERT_NE(promotedAfter, nullptr);
+                const bool left = frame.action == "rotate-left";
+                ASSERT_TRUE(left ? promotedBefore->hasLeft : promotedBefore->hasRight);
+                const int middle = left ? promotedBefore->left : promotedBefore->right;
+                EXPECT_EQ(left ? pivotAfter->right : pivotAfter->left, middle);
+                EXPECT_EQ(left ? promotedAfter->left : promotedAfter->right, frame.related);
+                const auto* middleBefore = findNode(frames.Get(i - 1), middle);
+                const auto* middleAfter = findNode(frame, middle);
+                ASSERT_NE(middleBefore, nullptr);
+                ASSERT_NE(middleAfter, nullptr);
+                EXPECT_EQ(middleBefore->hasLeft, middleAfter->hasLeft);
+                EXPECT_EQ(middleBefore->hasRight, middleAfter->hasRight);
+                EXPECT_EQ(middleBefore->left, middleAfter->left);
+                EXPECT_EQ(middleBefore->right, middleAfter->right);
+            }
+            if (frame.action == "imbalance") imbalance = true;
+        }
+        EXPECT_EQ(rotations, expected[example]);
+        EXPECT_TRUE(imbalance);
+        const auto& final = frames.Get(frames.GetCount() - 1);
+        CheckSnapshot(final, true);
+        ASSERT_EQ(final.nodes.GetCount(), 12);
+        EXPECT_EQ(final.nodes.Get(0).value, roots[example]);
+    }
+}
+
+TEST(GUI, AllTraversalsUseTheExistingEnumerator) {
+    BinaryTree<int> expected;
+    const int values[]{40, 20, 65, 10, 30, 50, 80, 25, 35, 45, 55, 70, 90};
+    for (int value : values) expected.Add(value);
+    TreeSession session;
+    for (int order = 0; order < 7; ++order) {
+        session.Execute("traverse", order);
+        auto enumerator = expected.GetEnumerator(static_cast<Traversal>(order));
+        const auto& frames = session.GetFrames();
+        const auto& final = frames.Get(frames.GetCount() - 1);
+        int index = 0;
+        while (enumerator->MoveNext()) {
+            ASSERT_LT(index, final.visited.GetCount());
+            EXPECT_EQ(final.visited.Get(index++), enumerator->CurrentRef());
+        }
+        EXPECT_EQ(index, final.visited.GetCount());
+        EXPECT_EQ(final.nodes.GetCount(), expected.GetCount());
+    }
+}
+
+TEST(GUI, InsertRemoveAndFindMatchTheRealTree) {
+    TreeSession session;
+    session.Execute("clear");
+    BinaryTree<int> expected;
+    std::mt19937 random(42);
+    bool sawReplacement = false;
+    for (int operation = 0; operation < 350; ++operation) {
+        const int value = static_cast<int>(random() % 61) - 30;
+        const int action = static_cast<int>(random() % 3);
+        session.Execute(action == 0 ? "add" : action == 1 ? "remove" : "find", value);
+        if (action == 0) expected.Add(value);
+        else if (action == 1) expected.Remove(value);
+        const auto& frames = session.GetFrames();
+        for (int i = 0; i < frames.GetCount(); ++i) {
+            CheckSnapshot(frames.Get(i), false);
+            if (frames.Get(i).action == "detach") sawReplacement = true;
+        }
+        const auto& final = frames.Get(frames.GetCount() - 1);
+        CheckSnapshot(final, true);
+        ASSERT_EQ(final.nodes.GetCount(), expected.GetCount());
+        EXPECT_TRUE(expected.IsValid());
+        int index = 0;
+        expected.VisitNodes([&](const int& actual, const int* left, const int* right, int height) {
+            const auto& node = final.nodes.Get(index++);
+            EXPECT_EQ(node.value, actual);
+            EXPECT_EQ(node.hasLeft, left != nullptr);
+            EXPECT_EQ(node.hasRight, right != nullptr);
+            if (left) EXPECT_EQ(node.left, *left);
+            if (right) EXPECT_EQ(node.right, *right);
+            EXPECT_EQ(node.height, height);
+        });
+        if (action == 2) EXPECT_EQ(final.action, expected.Find(value) ? "found" : "missing");
+    }
+    EXPECT_TRUE(sawReplacement);
+}
+
+TEST(GUI, EmptyTreeAndInvalidCommands) {
+    TreeSession session;
+    session.Execute("clear");
+    session.Execute("find", 0);
+    EXPECT_EQ(session.GetFrames().Get(1).action, "missing");
+    session.Execute("traverse", 6);
+    EXPECT_TRUE(session.GetFrames().Get(session.GetFrames().GetCount() - 1).visited.IsEmpty());
+    for (int value = -80; value < 80; ++value) session.Execute("add", value);
+    session.Execute("add", 0);
+    EXPECT_EQ(session.GetFrames().Get(session.GetFrames().GetCount() - 1).action, "duplicate");
+    EXPECT_THROW(session.Execute("add", 1000), std::invalid_argument);
+    EXPECT_THROW(session.Execute("traverse", -1), std::invalid_argument);
+    EXPECT_THROW(session.Execute("preset", 4), std::invalid_argument);
+    EXPECT_THROW(session.Execute("unknown"), std::invalid_argument);
+    const auto& final = session.GetFrames().Get(session.GetFrames().GetCount() - 1);
+    EXPECT_EQ(final.nodes.GetCount(), 160);
+    CheckSnapshot(final, true);
+    EXPECT_NE(session.ToJson().find("\"value\":0"), std::string::npos);
 }
 
 TEST(Tree, BalanceCopyAndMove) {

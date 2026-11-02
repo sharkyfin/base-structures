@@ -10,6 +10,7 @@
 #include "core/ICollectible.hpp"
 #include "core/IEnumerable.hpp"
 #include "core/Text.hpp"
+#include "trees/TreeObserver.hpp"
 
 enum class Traversal { KLP, KPL, LPK, LKP, PLK, PKL, BreadthFirst };
 
@@ -30,25 +31,31 @@ private:
     Compare compare;
     bool allowDuplicates{false};
     int version{0};
+    TreeObserver<T>* observer{nullptr};
 
     static int Height(const UniquePtr<Node>& node) noexcept;
 
     static void Update(Node& node) noexcept;
 
-    static void RotateLeft(UniquePtr<Node>& node);
+    void RotateLeft(UniquePtr<Node>& node);
 
-    static void RotateRight(UniquePtr<Node>& node);
+    void RotateRight(UniquePtr<Node>& node);
 
-    static void Balance(UniquePtr<Node>& node);
+    void Balance(UniquePtr<Node>& node);
+
+    void Notify(TreeEvent event, const Node* current = nullptr, const Node* related = nullptr) const noexcept;
+
+    template <class Visitor>
+    static void VisitNode(const Node* node, Visitor& visitor);
 
     void Invalidate() noexcept;
 
     template <class U>
     bool Insert(UniquePtr<Node>& node, U&& value);
 
-    static UniquePtr<Node> ExtractMinimum(UniquePtr<Node>& node);
+    UniquePtr<Node> ExtractMinimum(UniquePtr<Node>& node);
 
-    static UniquePtr<Node> ExtractMaximum(UniquePtr<Node>& node);
+    UniquePtr<Node> ExtractMaximum(UniquePtr<Node>& node);
 
     template <class Key>
     bool Erase(UniquePtr<Node>& node, const Key& key);
@@ -103,6 +110,12 @@ public:
     const Compare& GetCompare() const noexcept;
 
     bool IsValid() const;
+
+    // The caller owns the observer; copying or moving a tree does not copy its subscription.
+    void SetObserver(TreeObserver<T>* value) noexcept;
+
+    template <class Visitor>
+    void VisitNodes(Visitor visitor) const;
 
     template <class U>
     bool Add(U&& value);

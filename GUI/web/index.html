@@ -1,0 +1,331 @@
+<!doctype html>
+<html lang="ru">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <meta name="theme-color" content="#f4f5f0" />
+        <title>AVL</title>
+        <link
+            rel="icon"
+            href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Crect width='48' height='48' rx='14' fill='%232c6854'/%3E%3Cpath d='M24 12L12 34M24 12L36 34M12 34H36' stroke='white' stroke-width='3' fill='none'/%3E%3C/svg%3E"
+        />
+        <link rel="stylesheet" href="style.css" />
+        <script src="app.js" defer></script>
+    </head>
+    <body>
+        <svg class="icon-library" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+            <symbol id="i-play" viewBox="0 0 24 24">
+                <path d="m9 5 11 7-11 7z" fill="currentColor" stroke="none" />
+            </symbol>
+            <symbol id="i-pause" viewBox="0 0 24 24"><path d="M9 5v14M16 5v14" stroke-width="4" /></symbol>
+            <symbol id="i-back" viewBox="0 0 24 24"><path d="M6 5v14m13-14L9 12l10 7z" /></symbol>
+            <symbol id="i-next" viewBox="0 0 24 24"><path d="M18 5v14M5 5l10 7-10 7z" /></symbol>
+            <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" /></symbol>
+            <symbol id="i-minus" viewBox="0 0 24 24"><path d="M5 12h14" /></symbol>
+            <symbol id="i-fit" viewBox="0 0 24 24"><path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5" /></symbol>
+            <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M4 12h15m-6-6 6 6-6 6" /></symbol>
+            <symbol id="i-shuffle" viewBox="0 0 24 24">
+                <path d="M4 6h3l10 12h3m-4-4 4 4-4 3M4 18h3L17 6h3m-4-3 4 3-4 4" />
+            </symbol>
+        </svg>
+
+        <div class="app-shell">
+            <header class="header">
+                <a class="brand" href="/" aria-label="AVL, главная">
+                    <span class="brand-mark"
+                        ><svg viewBox="0 0 40 40">
+                            <path d="m20 10-10 19m10-19 10 19" />
+                            <circle cx="20" cy="10" r="4" />
+                            <circle cx="10" cy="29" r="4" />
+                            <circle cx="30" cy="29" r="4" /></svg
+                    ></span>
+                    <span class="brand-name">AVL</span>
+                </a>
+            </header>
+
+            <main class="workspace">
+                <aside class="sidebar" aria-label="Команды дерева">
+                    <div class="control-tabs" role="tablist" aria-label="Управление деревом">
+                        <button
+                            id="tab-operations"
+                            role="tab"
+                            aria-controls="panel-operations"
+                            aria-selected="true"
+                            data-tab="operations"
+                        >
+                            Операции
+                        </button>
+                        <button
+                            id="tab-traversal"
+                            role="tab"
+                            aria-controls="panel-traversal"
+                            aria-selected="false"
+                            tabindex="-1"
+                            data-tab="traversal"
+                        >
+                            Обход
+                        </button>
+                        <button
+                            id="tab-rotations"
+                            role="tab"
+                            aria-controls="panel-rotations"
+                            aria-selected="false"
+                            tabindex="-1"
+                            data-tab="rotations"
+                        >
+                            Повороты
+                        </button>
+                    </div>
+                    <section
+                        id="panel-operations"
+                        class="control-section"
+                        role="tabpanel"
+                        aria-labelledby="tab-operations"
+                    >
+                        <div class="section-title">
+                            <h2>Операции с узлами</h2>
+                        </div>
+                        <form id="operation-form">
+                            <div class="segmented" aria-label="Операция">
+                                <button
+                                    type="button"
+                                    class="selected"
+                                    data-operation="add"
+                                    aria-pressed="true"
+                                >
+                                    Добавить
+                                </button>
+                                <button type="button" data-operation="remove" aria-pressed="false">
+                                    Удалить
+                                </button>
+                                <button type="button" data-operation="find" aria-pressed="false">
+                                    Найти
+                                </button>
+                            </div>
+                            <label class="field-label" for="value">Значение узла</label>
+                            <div class="number-field">
+                                <input
+                                    id="value"
+                                    name="value"
+                                    type="number"
+                                    min="-999"
+                                    max="999"
+                                    step="1"
+                                    value="42"
+                                    required
+                                    autocomplete="off"
+                                /><span>целое число</span>
+                            </div>
+                            <button id="run-operation" class="button primary" type="submit">
+                                <span id="operation-label">Добавить узел</span
+                                ><svg><use href="#i-arrow" /></svg>
+                            </button>
+                        </form>
+                        <p class="hint">От −999 до 999</p>
+                    </section>
+
+                    <section
+                        id="panel-traversal"
+                        class="control-section"
+                        role="tabpanel"
+                        aria-labelledby="tab-traversal"
+                        hidden
+                    >
+                        <div class="section-title">
+                            <h2>Обход дерева</h2>
+                        </div>
+                        <label class="field-label" for="traversal">Порядок посещения</label>
+                        <select id="traversal">
+                            <option value="6">По уровням · в ширину</option>
+                            <option value="3">ЛКП · по возрастанию</option>
+                            <option value="0">КЛП · прямой обход</option>
+                            <option value="2">ЛПК · обратный обход</option>
+                            <option value="1">КПЛ · корень, право, лево</option>
+                            <option value="4">ПЛК · право, лево, корень</option>
+                            <option value="5">ПКЛ · по убыванию</option>
+                        </select>
+                        <button id="run-traversal" class="button secondary" type="button">
+                            <svg><use href="#i-play" /></svg>Показать обход
+                        </button>
+                        <p class="hint">К — корень · Л — лево · П — право</p>
+                    </section>
+
+                    <section
+                        id="panel-rotations"
+                        class="control-section"
+                        role="tabpanel"
+                        aria-labelledby="tab-rotations"
+                        hidden
+                    >
+                        <div class="section-title">
+                            <h2>Повороты AVL</h2>
+                        </div>
+                        <p class="description">Пример заменит текущее дерево.</p>
+                        <div class="preset-grid">
+                            <button class="preset" data-preset="0" type="button">
+                                <span>LL <span>↷</span></span
+                                ><small>Поворот вправо</small>
+                            </button>
+                            <button class="preset" data-preset="1" type="button">
+                                <span>RR <span>↶</span></span
+                                ><small>Поворот влево</small>
+                            </button>
+                            <button class="preset" data-preset="2" type="button">
+                                <span>LR <span>↔</span></span
+                                ><small>Лево → право</small>
+                            </button>
+                            <button class="preset" data-preset="3" type="button">
+                                <span>RL <span>↔</span></span
+                                ><small>Право → лево</small>
+                            </button>
+                        </div>
+                    </section>
+                    <p id="operation-lock" class="hint" hidden>Команды доступны после последнего шага.</p>
+                    <div class="sidebar-bottom">
+                        <button id="random" class="button quiet" type="button">
+                            <svg><use href="#i-shuffle" /></svg>Случайное дерево
+                        </button>
+                        <button id="clear" class="clear-button" type="button">Очистить дерево</button>
+                    </div>
+                </aside>
+
+                <section class="tree-workspace" aria-label="Визуализация AVL-дерева">
+                    <div class="canvas-card">
+                        <div class="canvas-topbar">
+                            <div class="canvas-label">Дерево</div>
+                            <div class="stats">
+                                <span><b id="node-count">—</b> узлов</span
+                                ><span><b id="tree-height">—</b> высота</span
+                                ><span><b id="rotation-count">0</b> поворотов</span>
+                            </div>
+                        </div>
+                        <div id="tree-stage" class="tree-stage">
+                            <svg
+                                id="tree"
+                                xmlns="http://www.w3.org/2000/svg"
+                                role="img"
+                                aria-label="Схема AVL-дерева"
+                                tabindex="0"
+                            >
+                                <defs>
+                                    <filter id="node-shadow" x="-50%" y="-50%" width="200%" height="200%">
+                                        <feGaussianBlur in="SourceAlpha" stdDeviation="4" />
+                                        <feOffset dx="0" dy="4" />
+                                        <feComponentTransfer>
+                                            <feFuncA type="linear" slope=".08" />
+                                        </feComponentTransfer>
+                                        <feMerge>
+                                            <feMergeNode />
+                                            <feMergeNode in="SourceGraphic" />
+                                        </feMerge>
+                                    </filter>
+                                </defs>
+                                <g id="edges"></g>
+                                <g id="nodes"></g>
+                            </svg>
+                            <div id="empty-state" class="empty-state" hidden>
+                                <span>∅</span>
+                                <h3>Дерево пусто</h3>
+                                <p>Добавьте узел.</p>
+                            </div>
+                            <div class="zoom-controls">
+                                <button id="zoom-out" aria-label="Уменьшить" title="Уменьшить">
+                                    <svg><use href="#i-minus" /></svg></button
+                                ><button
+                                    id="fit"
+                                    aria-label="Показать всё дерево"
+                                    title="Показать всё дерево"
+                                >
+                                    <svg><use href="#i-fit" /></svg></button
+                                ><button id="zoom-in" aria-label="Увеличить" title="Увеличить">
+                                    <svg><use href="#i-plus" /></svg>
+                                </button>
+                            </div>
+                        </div>
+                        <div id="canvas-legend" class="canvas-legend">
+                            <span
+                                ><i class="legend-current"></i
+                                ><span id="legend-primary">Текущий узел</span></span
+                            ><span
+                                ><i class="legend-visited"></i
+                                ><span id="legend-secondary">Посещён</span></span
+                            ><span
+                                ><i class="legend-balance"></i
+                                ><span id="legend-third">Балансировка</span></span
+                            ><span class="legend-meta">h — высота · b — баланс</span>
+                        </div>
+                    </div>
+
+                    <div class="explanation" aria-live="polite">
+                        <div id="action-icon" class="action-icon">↳</div>
+                        <div>
+                            <div class="explanation-heading">
+                                <h2 id="action-title">Готово</h2>
+                                <span id="step-counter">ШАГ 0 / 0</span>
+                            </div>
+                            <p id="action-message">Загружаем дерево…</p>
+                        </div>
+                    </div>
+
+                    <div class="player-card">
+                        <div class="player-controls">
+                            <button
+                                id="previous"
+                                class="icon-button"
+                                aria-label="Предыдущий шаг"
+                                title="Предыдущий шаг (←)"
+                            >
+                                <svg><use href="#i-back" /></svg></button
+                            ><button
+                                id="play"
+                                class="play-button"
+                                aria-label="Воспроизвести"
+                                title="Пуск / пауза (пробел)"
+                            >
+                                <svg><use id="play-icon" href="#i-play" /></svg></button
+                            ><button
+                                id="next"
+                                class="icon-button"
+                                aria-label="Следующий шаг"
+                                title="Следующий шаг (→)"
+                            >
+                                <svg><use href="#i-next" /></svg>
+                            </button>
+                        </div>
+                        <div class="timeline">
+                            <label for="progress"
+                                >Ход операции<span id="progress-label">0 из 0</span></label
+                            ><input
+                                id="progress"
+                                type="range"
+                                min="0"
+                                max="0"
+                                value="0"
+                                step="1"
+                                aria-label="Шаг операции"
+                            />
+                        </div>
+                        <label class="speed-label" for="speed"
+                            >Скорость<select id="speed">
+                                <option value="0.5">0.5×</option>
+                                <option value="1" selected>1×</option>
+                                <option value="1.5">1.5×</option>
+                                <option value="2">2×</option>
+                            </select></label
+                        >
+                    </div>
+                    <div id="result-row" class="result-row" hidden>
+                        <span class="eyebrow">РЕЗУЛЬТАТ ОБХОДА</span>
+                        <div id="sequence" class="sequence">
+                            <span class="sequence-placeholder"
+                                >Запусти обход, чтобы увидеть порядок узлов</span
+                            >
+                        </div>
+                    </div>
+                </section>
+            </main>
+        </div>
+        <div id="error" class="error-toast" role="alert" hidden></div>
+        <noscript>Для визуализации нужно включить JavaScript.</noscript>
+    </body>
+</html>

@@ -60,23 +60,54 @@ void BinaryTree<T, Compare>::Update(Node& node) noexcept {
 }
 
 template <class T, class Compare>
+void BinaryTree<T, Compare>::Notify(TreeEvent event, const Node* current, const Node* related) const noexcept {
+    if (observer) observer->OnTreeEvent(event, current ? &current->value : nullptr,
+                                      related ? &related->value : nullptr);
+}
+
+template <class T, class Compare>
+void BinaryTree<T, Compare>::SetObserver(TreeObserver<T>* value) noexcept {
+    observer = value;
+}
+
+template <class T, class Compare>
+template <class Visitor>
+void BinaryTree<T, Compare>::VisitNode(const Node* node, Visitor& visitor) {
+    if (!node) return;
+    visitor(node->value, node->left ? &node->left->value : nullptr,
+            node->right ? &node->right->value : nullptr, node->height);
+    VisitNode(node->left.get(), visitor);
+    VisitNode(node->right.get(), visitor);
+}
+
+template <class T, class Compare>
+template <class Visitor>
+void BinaryTree<T, Compare>::VisitNodes(Visitor visitor) const {
+    VisitNode(root.get(), visitor);
+}
+
+template <class T, class Compare>
 void BinaryTree<T, Compare>::RotateLeft(UniquePtr<Node>& node) {
+    const Node* previous = node.get();
     auto next = Move(node->right);
     node->right = Move(next->left);
     Update(*node);
     next->left = Move(node);
     Update(*next);
     node = Move(next);
+    Notify(TreeEvent::RotatedLeft, node.get(), previous);
 }
 
 template <class T, class Compare>
 void BinaryTree<T, Compare>::RotateRight(UniquePtr<Node>& node) {
+    const Node* previous = node.get();
     auto next = Move(node->left);
     node->left = Move(next->right);
     Update(*node);
     next->right = Move(node);
     Update(*next);
     node = Move(next);
+    Notify(TreeEvent::RotatedRight, node.get(), previous);
 }
 
 template <class T, class Compare>
@@ -85,9 +116,11 @@ void BinaryTree<T, Compare>::Balance(UniquePtr<Node>& node) {
     Update(*node);
     const int difference = Height(node->left) - Height(node->right);
     if (difference > 1) {
+        Notify(TreeEvent::Imbalance, node.get());
         if (Height(node->left->left) < Height(node->left->right)) RotateLeft(node->left);
         RotateRight(node);
     } else if (difference < -1) {
+        Notify(TreeEvent::Imbalance, node.get());
         if (Height(node->right->right) < Height(node->right->left)) RotateRight(node->right);
         RotateLeft(node);
     }
@@ -103,13 +136,18 @@ template <class U>
 bool BinaryTree<T, Compare>::Insert(UniquePtr<Node>& node, U&& value) {
     if (!node) {
         node = MakeUnique<Node>(static_cast<U&&>(value));
+        Notify(TreeEvent::Inserted, node.get());
         return true;
     }
+    Notify(TreeEvent::Compare, node.get());
     bool inserted = false;
     if (compare(value, node->value)) inserted = Insert(node->left, static_cast<U&&>(value));
     else if (allowDuplicates || compare(node->value, value)) {
         inserted = Insert(node->right, static_cast<U&&>(value));
-    } else return false;
+    } else {
+        Notify(TreeEvent::Duplicate, node.get());
+        return false;
+    }
     Balance(node);
     return inserted;
 }
@@ -119,6 +157,7 @@ UniquePtr<typename BinaryTree<T, Compare>::Node> BinaryTree<T, Compare>::Extract
     if (!node->left) {
         auto minimum = Move(node);
         node = Move(minimum->right);
+        Notify(TreeEvent::DetachedMinimum, minimum.get());
         return minimum;
     }
     auto minimum = ExtractMinimum(node->left);
@@ -141,21 +180,29 @@ UniquePtr<typename BinaryTree<T, Compare>::Node> BinaryTree<T, Compare>::Extract
 template <class T, class Compare>
 template <class Key>
 bool BinaryTree<T, Compare>::Erase(UniquePtr<Node>& node, const Key& key) {
-    if (!node) return false;
+    if (!node) {
+        Notify(TreeEvent::Missing);
+        return false;
+    }
+    Notify(TreeEvent::Compare, node.get());
     bool removed = true;
     if (compare(key, node->value)) removed = Erase(node->left, key);
     else if (compare(node->value, key)) removed = Erase(node->right, key);
-    else if (!node->left) {
-        auto next = Move(node->right);
-        node = Move(next);
-    } else if (!node->right) {
-        auto next = Move(node->left);
-        node = Move(next);
-    } else {
-        auto next = ExtractMinimum(node->right);
-        next->left = Move(node->left);
-        next->right = Move(node->right);
-        node = Move(next);
+    else {
+        Notify(TreeEvent::Removing, node.get());
+        if (!node->left) {
+            auto next = Move(node->right);
+            node = Move(next);
+        } else if (!node->right) {
+            auto next = Move(node->left);
+            node = Move(next);
+        } else {
+            auto next = ExtractMinimum(node->right);
+            next->left = Move(node->left);
+            next->right = Move(node->right);
+            node = Move(next);
+        }
+        Notify(TreeEvent::Removed, node.get());
     }
     Balance(node);
     return removed;
@@ -166,10 +213,15 @@ template <class Key>
 typename BinaryTree<T, Compare>::Node* BinaryTree<T, Compare>::FindNode(const Key& key) const {
     Node* node = root.get();
     while (node) {
+        Notify(TreeEvent::Compare, node);
         if (compare(key, node->value)) node = node->left.get();
         else if (compare(node->value, key)) node = node->right.get();
-        else return node;
+        else {
+            Notify(TreeEvent::Found, node);
+            return node;
+        }
     }
+    Notify(TreeEvent::Missing);
     return nullptr;
 }
 
