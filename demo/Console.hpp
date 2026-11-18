@@ -4,7 +4,7 @@
 #include <random>
 #include <string>
 
-#include "benchmark/Benchmark.hpp"
+#include "benchmark/Report.hpp"
 #include "domain/Values.hpp"
 #include "trees/BinaryTree.hpp"
 

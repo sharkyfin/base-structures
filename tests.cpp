@@ -16,6 +16,7 @@
 #include "sequences/SortedArraySequence.hpp"
 #include "sets/BinaryTreeSet.hpp"
 #include "benchmark/Benchmark.hpp"
+#include "benchmark/Report.hpp"
 #include "domain/Values.hpp"
 #include "GUI/TreeSession.hpp"
 
@@ -540,12 +541,140 @@ TEST(Values, RecordsFunctionsAndTiming) {
     EXPECT_EQ(studentsCopy.GetCount(), 2);
     EXPECT_TRUE(studentsCopy.Contains(student));
     int executed = 0;
-    const auto complete = Measure(10, 1, [&](int) { ++executed; });
+    const auto complete = Measure(10, [&](int i) { ++executed; return i; });
     EXPECT_EQ(complete.completed, executed);
-    EXPECT_FALSE(complete.timedOut);
-    const auto limited = Measure(100000, 0.000000001, [](int) {});
-    EXPECT_TRUE(limited.timedOut);
-    EXPECT_LT(limited.completed, 100000);
+    EXPECT_EQ(complete.checksum, 45);
+    EXPECT_GE(complete.milliseconds, 0);
+    EXPECT_THROW(Measure(0, [](int) { return 0; }), std::invalid_argument);
+}
+
+TEST(Benchmark, SizesAndReproducibleOrders) {
+    const auto sizes = BenchmarkSizes(1000000);
+    ASSERT_EQ(sizes.GetCount(), 28);
+    EXPECT_EQ(sizes.GetFirst(), 1000);
+    EXPECT_EQ(sizes.GetLast(), 1000000);
+    EXPECT_EQ(BenchmarkSizes(1500).GetLast(), 1500);
+    EXPECT_THROW(BenchmarkSizes(999), std::invalid_argument);
+    const auto ascending = BenchmarkInput(101, 0, 42);
+    const auto descending = BenchmarkInput(101, 1, 42);
+    auto random = BenchmarkInput(101, 2, 42);
+    EXPECT_EQ(Elements(random), Elements(BenchmarkInput(101, 2, 42)));
+    EXPECT_NE(Elements(random), Elements(BenchmarkInput(101, 2, 43)));
+    random.Sort();
+    for (int i = 0; i < 101; ++i) {
+        EXPECT_EQ(ascending.Get(i), 2 * i);
+        EXPECT_EQ(descending.Get(i), 2 * (100 - i));
+        EXPECT_EQ(random.Get(i), ascending.Get(i));
+    }
+}
+
+TEST(Benchmark, CompleteCsvWithoutWarmupOrPartialBatches) {
+    std::ostringstream output;
+    RunBenchmarks(1001, 2, 42, output, 32);
+    std::istringstream input(output.str());
+    std::string line;
+    ASSERT_TRUE(static_cast<bool>(std::getline(input, line)));
+    EXPECT_EQ(line, "structure,operation,order,n,operations,repetition,seed,milliseconds,checksum,status");
+    HashTable<std::string, int> seen;
+    int rows = 0;
+    while (std::getline(input, line)) {
+        std::istringstream record(line);
+        ArraySequence<std::string> fields;
+        std::string field;
+        while (std::getline(record, field, ',')) fields.Append(field);
+        ASSERT_EQ(fields.GetCount(), 10);
+        const int n = ReadText<int>(fields.Get(3));
+        const int operations = ReadText<int>(fields.Get(4));
+        const int repetition = ReadText<int>(fields.Get(5));
+        EXPECT_TRUE(n == 1000 || n == 1001);
+        EXPECT_TRUE(repetition == 1 || repetition == 2);
+        const auto& operation = fields.Get(1);
+        const bool query = operation == "find_hit" || operation == "find_miss" || operation == "peek";
+        const bool batch = operation == "insert" || operation == "remove" || operation == "enqueue" || operation == "dequeue" || operation == "pop";
+        EXPECT_EQ(operations, query ? 32 : batch ? n : 1);
+        EXPECT_GE(ReadText<double>(fields.Get(7)), 0);
+        EXPECT_EQ(fields.Get(9), "ok");
+        const auto key = fields.Get(0) + "/" + operation + "/" + fields.Get(2) + "/" + fields.Get(3) + "/" + fields.Get(5);
+        ASSERT_FALSE(seen.ContainsKey(key));
+        seen.Add(key, 1);
+        ++rows;
+    }
+    EXPECT_EQ(rows, 23 * 3 * 2 * 2);
+    std::ostringstream invalid;
+    EXPECT_THROW(RunBenchmarks(1000, 0, 42, invalid), std::invalid_argument);
+    EXPECT_TRUE(invalid.str().empty());
+}
+
+TEST(Benchmark, ArithmeticMeanAndInvalidCsv) {
+    std::ostringstream measured;
+    RunBenchmarks(1000, 3, 42, measured, 32);
+    std::istringstream input(measured.str());
+    std::ostringstream fixture;
+    std::ostringstream summaryFixture;
+    summaryFixture << "structure,operation,order,n,samples,unit,mean\n";
+    std::string line;
+    ASSERT_TRUE(static_cast<bool>(std::getline(input, line)));
+    fixture << line << '\n';
+    while (std::getline(input, line)) {
+        ArraySequence<std::string> fields;
+        std::istringstream row(line);
+        std::string field;
+        while (std::getline(row, field, ',')) fields.Append(field);
+        const char* times[]{"1", "2", "12"}; // Mean is 5; median would be 2.
+        if (fields.Get(5) == "1") {
+            const auto& operation = fields.Get(1);
+            const bool query = operation == "find_hit" || operation == "find_miss" || operation == "peek";
+            summaryFixture << fields.Get(0) << ',' << operation << ',' << fields.Get(2) << ',' << fields.Get(3)
+                           << ",3," << (query ? "ns/query" : "ms") << ',' << (query ? 156250 : 5) << '\n';
+        }
+        for (int i = 0; i < fields.GetCount(); ++i) {
+            if (i) fixture << ',';
+            fixture << (i == 7 ? times[ReadText<int>(fields.Get(5)) - 1] : fields.Get(i));
+        }
+        fixture << '\n';
+    }
+    std::istringstream csv(fixture.str());
+    const auto report = ReadBenchmarkReport(csv);
+    ASSERT_EQ(report.points.GetSize(), 69);
+    EXPECT_EQ(report.repetitions, 3);
+    EXPECT_EQ(report.queries, 32);
+    EXPECT_EQ(report.seed, 42U);
+    std::istringstream summaryCsv(summaryFixture.str());
+    const auto fromSummary = ReadBenchmarkSummary(summaryCsv);
+    ASSERT_EQ(fromSummary.points.GetSize(), report.points.GetSize());
+    EXPECT_EQ(fromSummary.repetitions, report.repetitions);
+    EXPECT_EQ(fromSummary.maxCount, report.maxCount);
+    for (int i = 0; i < report.points.GetSize(); ++i) {
+        const auto& point = report.points.Get(i);
+        const bool query = point.operation == 1 || point.operation == 2 || point.operation == 7
+            || point.operation == 8 || point.operation == 15 || point.operation == 18 || point.operation == 21;
+        EXPECT_DOUBLE_EQ(point.Mean(), query ? 5000000.0 / 32 : 5);
+        EXPECT_DOUBLE_EQ(fromSummary.points.Get(i).Mean(), point.Mean());
+    }
+    const std::string data = fixture.str();
+    const auto firstRow = data.substr(data.find('\n') + 1, data.find('\n', data.find('\n') + 1) - data.find('\n'));
+    std::istringstream duplicate(data + firstRow);
+    EXPECT_THROW(ReadBenchmarkReport(duplicate), std::invalid_argument);
+    std::istringstream truncated(data.substr(0, data.rfind('\n', data.size() - 2) + 1));
+    EXPECT_THROW(ReadBenchmarkReport(truncated), std::invalid_argument);
+    std::string partial = data;
+    const auto position = partial.find(",1000,1000,");
+    ASSERT_NE(position, std::string::npos);
+    partial.replace(position, 11, ",1000,999,");
+    std::istringstream badBatch(partial);
+    EXPECT_THROW(ReadBenchmarkReport(badBatch), std::invalid_argument);
+    const auto summary = summaryFixture.str();
+    const auto headerEnd = summary.find('\n');
+    std::istringstream duplicateSummary(summary + summary.substr(headerEnd + 1, summary.find('\n', headerEnd + 1) - headerEnd));
+    EXPECT_THROW(ReadBenchmarkSummary(duplicateSummary), std::invalid_argument);
+    std::istringstream truncatedSummary(summary.substr(0, summary.rfind('\n', summary.size() - 2) + 1));
+    EXPECT_THROW(ReadBenchmarkSummary(truncatedSummary), std::invalid_argument);
+    std::string wrongUnit = summary;
+    const auto unit = wrongUnit.find("ns/query");
+    ASSERT_NE(unit, std::string::npos);
+    wrongUnit.replace(unit, 8, "ms");
+    std::istringstream invalidUnit(wrongUnit);
+    EXPECT_THROW(ReadBenchmarkSummary(invalidUnit), std::invalid_argument);
 }
 
 TEST(SharedStructures, CollectionInteroperability) {

@@ -259,9 +259,10 @@ inline void RunConsole() {
                 std::cout << "Функции: square, negate, increment. Порядок по имени.\n";
                 SelectStructure<int (*)(int)>(ReadFunction, WriteFunction, SampleFunction, FunctionOrder()); break;
             case 8: {
-                const int count = ReadInt("Максимальный N (10000..100000000): ");
-                const double seconds = ReadText<double>(ReadLine("Лимит одной серии, секунды: "));
-                RunBenchmarks(count, seconds);
+                const int count = ReadInt("Максимальный N (1000..100000000): ");
+                const int repetitions = ReadInt("Повторов на точку (обычно 7): ");
+                const auto seed = ReadText<unsigned int>(ReadLine("Seed (обычно 42): "));
+                RunBenchmarkReport(count, repetitions, seed);
                 break;
             }
             case 9: RunDemo(); break;
